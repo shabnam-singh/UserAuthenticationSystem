@@ -39,7 +39,7 @@ const AdminPanel = () => {
     }
 
     return (
-        <div className="container">
+        <div className="container" style={{width:'500px'}}>
             <h2>Admin Panel</h2>
             <button onClick={handleSignOut}>Sign Out</button>
             <table>

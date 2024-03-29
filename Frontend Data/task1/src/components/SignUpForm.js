@@ -1,5 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
+import PhoneInput from 'react-phone-input-2'
+import 'react-phone-input-2/lib/style.css'
+import { RecaptchaVerifier, createUserWithEmailAndPassword, sendEmailVerification, signInWithPhoneNumber } from 'firebase/auth';
+import { auth } from '../firebase/setup';
+import { useNavigate } from 'react-router-dom';
+
 
 const SignUpForm = () => {
     const [formData, setFormData] = useState({
@@ -10,9 +16,27 @@ const SignUpForm = () => {
         password: ''
     });
     const [image, setImage] = useState("");
+    const [dv, showVerifyBtn] = useState(false);
+    const [phone, setPhone] = useState("");
+    const [user, setUser] = useState(null);
+    const [phoneOTP, setPHoneOTP] = useState("");
+    const [otpMsg, setOTPMsg] = useState("");
+    const [emailMsg, setEmailMessage] = useState("");
+
+
+    const [flag1, setFlag1] = useState(false);
+    const [flag2, setFlag2] = useState(false);
+    const [isEmailVerify,setIsEmailVerified]=useState(false);
+    
+
+    const navigate = useNavigate();
+
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
+        if(emailMsg===" Email Verified..."){
+            setFlag1(true);
+        }
     };
 
     const handleFileChange = (e) => {
@@ -28,11 +52,15 @@ const SignUpForm = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if(!isEmailVerify){
+            alert("Please Verify Email First\nReload page to check verification status");
+            return
+        }
 
         const formDataToSend = new FormData();
         formDataToSend.append('name', formData.name);
         formDataToSend.append('email', formData.email);
-        formDataToSend.append('phone', formData.mobile);
+        formDataToSend.append('phone', phone);
         formDataToSend.append('password', formData.password);
         formDataToSend.append('pImage', image);
 
@@ -50,6 +78,7 @@ const SignUpForm = () => {
 
             console.log('Sign-up successful:', response.data);
             alert("User Register Successfully....")
+            navigate('/admin');
 
         } catch (error) {
             console.error('Error signing up:', error);
@@ -57,23 +86,183 @@ const SignUpForm = () => {
 
     };
 
+    const sendOTPButton = async () => {
+        const regex = /^\+91[6-9]\d{4}[-]?\d{5}$/;
+        const isValidPhoneNumber = regex.test(phone);
+        if (phone === "") {
+            alert("Enter Phone Number");
+            return
+        }
+        if (!isValidPhoneNumber) {
+            alert("Phone number Should Start from 6-9 \n and should be 10 digit")
+            return
+        }
+
+        // showVerifyBtn(true);
+        // setOTPMsg(" OTP Sent Successfully")
+        // return
+        try {
+            const recaptcha = new RecaptchaVerifier(auth, "recaptcha", {});
+            const confirmation1 = await signInWithPhoneNumber(auth, phone, recaptcha)
+            setUser(confirmation1)
+            showVerifyBtn(true);
+            setOTPMsg(" OTP Sent Successfully")
+        }
+        catch (err) {
+            console.log("Error in Sending OTP", err)
+        }
+    }
+
+
+    const verifyEmail = async () => {
+        try {
+            const userCred = await createUserWithEmailAndPassword(auth, formData.email, "admin123");
+            const user = userCred.user;
+            await sendEmailVerification(user);
+            setEmailMessage("Verification Link Sent Successfully");
+        
+        } catch (err) {
+            if (err.code === "auth/email-already-in-use") {
+                setFlag1(true);
+                console.error("Email is already in use:", err.message);
+                setEmailMessage("Email is already in use.");
+            } else {
+                console.error("Error in Verifying Email:", err);
+            }
+        }
+    };
+
+    useEffect(() => {
+        const unsubscribe =  auth.onAuthStateChanged((user) => {
+            if (user) {
+                setIsEmailVerified(user.emailVerified);
+                if (user.emailVerified) {
+                    setFlag1(true);
+                    setEmailMessage(" Email Verified...");
+                    setFormData((prevFormData) => ({
+                        ...prevFormData,
+                        email:user.email ,
+                    }));
+                  
+                }
+            }
+        });
+        
+        return () => unsubscribe(); // Cleanup function to unsubscribe from the auth state changes
+    }, []);
+
+
+
+
+    // const verifyEmail = async () => {
+    //     try {
+    //         await createUserWithEmailAndPassword(auth, formData.email, "admin123").then(
+    //             async (userCred) => {
+    //                 const user = userCred.user;
+    //                 await sendEmailVerification(user);
+    //                 setEmailMsg(" Verification Link Sent Successfully")
+    //                 setFlag1(true)
+    //             });
+    //     }
+    //     catch (err) {
+    //         if (err.code === "auth/email-already-in-use") {
+    //             setFlag1(true)
+                
+    //             console.error("Email is already in use:", err.message);
+               
+    //             setEmailMsg(" Email is already in use.");
+    //         } else {
+    //             console.error("Error in Verifying Email:", err);
+    //         }
+    //     }
+
+    // }
+
+    // useEffect(() => {
+    //     if(userCred!=null){
+    //         auth.onAuthStateChanged((userCred) => {
+              
+    //                 const {emailVerified } = userCred;
+    //             if (emailVerified) {
+    //                 setFlag1(true)
+    //                 setIsEmailVerify(true)
+    //                 setEmailMsg(" Email Verified...")
+    //             }
+            
+    
+    //         });
+    //     }
+
+    // }, []);
+
+
+
+    const verifyPhoneOTP = async () => {
+        // setFlag2(true)
+        // return
+        try {
+            let userData = await user.confirm(phoneOTP)
+            console.log(userData)
+            setFlag2(true);
+            setOTPMsg(" Phone Number Verified...")
+        }
+        catch (err) {
+            alert("Otp Expire or OTP Limit Reached or OTP Expire")
+        }
+
+    }
+
+
+
     return (
-        <div className="container">
+        <div>
             <h2>User Sign Up</h2>
             <form onSubmit={handleSubmit}>
-                <label htmlFor="name">Name:</label>
-                <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} required />
-                <label htmlFor="email">Email:</label>
-                <input type="email" id="email" name="email" value={formData.email} onChange={handleChange} required />
-                <label htmlFor="mobile">Mobile Number:</label>
-                <input type="tel" id="mobile" name="mobile" pattern="[6-9]{1}[0-9]{9}" value={formData.mobile} onChange={handleChange} required />
+                <div className='leftLabel container'>
+                    <label className="mylabel" htmlFor="name">Name:</label>
+                    <input type="text" id="name" name="name" value={formData.name} onChange={handleChange} required />
 
-                <label htmlFor="image">File Upload (Image File):</label>
-                <input type="file" id="image" name="profileImage" accept=".png , .jpeg, .jpg" onChange={handleFileChange} required />
+                    <label htmlFor="email">Email:</label>
+                    <input type="email" id="email" name="email" value={formData.email} onChange={handleChange} required />
 
-                <label htmlFor="password">Password:</label>
-                <input type="password" id="password" name="password" value={formData.password} onChange={handleChange} required />
-                <input type="submit" value="Sign Up" />
+                    <button type='button' className='mybtn' onClick={verifyEmail}>Send Verification Link</button><span style={{ fontSize: 'x-small' }}>{emailMsg}</span><br />
+
+                    <label htmlFor="mobile">Mobile Number:</label>
+                    {/* <input type="tel" id="mobile"  pattern="[6-9]{1}[0-9]{9}"  /> */}
+                    <PhoneInput
+                        country={'in'}
+                        value={phone}
+                        onChange={(phone) => setPhone("+" + phone)}
+                    />
+                    <div id='recaptcha' style={{ marginTop: '2px' }}>
+
+                    </div>
+
+                    <button type='button' className='mybtn' onClick={sendOTPButton}>Send OTP</button><span style={{ fontSize: 'x-small' }}>{otpMsg}</span><br />
+
+                    {
+                        dv && <div>
+                            <table>
+
+                                <tr>
+                                    <td>
+                                        <input type="text" placeholder='Enter Phone OTP' onChange={(e) => setPHoneOTP(e.target.value)} />
+                                    </td>
+                                    <td>
+                                        <button type='button' className='mybtn' onClick={verifyPhoneOTP}>Verify Phone</button>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    }
+
+                    <label htmlFor="image">File Upload (Image File):</label>
+                    <input type="file" id="image" name="profileImage" accept=".png , .jpeg, .jpg" onChange={handleFileChange} required />
+
+                    <label htmlFor="password">Password:</label>
+                    <input type="password" id="password" name="password" value={formData.password} onChange={handleChange} required />
+                    {flag1 && flag2 ? <input type="submit" value="Sign Up" /> : ""}
+                </div>
             </form>
             <p>Already have an account? <a href="/signin">Sign In</a></p>
             <p>Admin? <a href="/admin">Admin Login</a></p>
