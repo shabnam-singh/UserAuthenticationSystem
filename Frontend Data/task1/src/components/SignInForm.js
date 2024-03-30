@@ -42,7 +42,7 @@ const SignInForm = () => {
             <h2>User Sign In</h2>
             <form onSubmit={handleSubmit}>
                 <label htmlFor="Number">Number:</label>
-                <input type="tel" id="phone" name="number" pattern="[6-9]{1}[0-9]{9}" value={formData.number} onChange={handleChange} required></input>
+                <input type="tel" id="phone" name="number" pattern="^\+91[6-9]\d{4}[-]?\d{5}$" value={formData.number} onChange={handleChange} required></input>
             
                 <label htmlFor="password">Password:</label>
                 <input type="password" id="password" name="pass" value={formData.pass} onChange={handleChange} required />

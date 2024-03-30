@@ -3,7 +3,7 @@ import axios from 'axios';
 import PhoneInput from 'react-phone-input-2'
 import 'react-phone-input-2/lib/style.css'
 import { RecaptchaVerifier, createUserWithEmailAndPassword, sendEmailVerification, signInWithPhoneNumber } from 'firebase/auth';
-import { auth } from '../firebase/setup';
+import { auth, auth2 } from '../firebase/setup';
 import { useNavigate } from 'react-router-dom';
 
 
@@ -12,7 +12,7 @@ const SignUpForm = () => {
         name: '',
         email: '',
         mobile: '',
-        profileImage: '', // P
+        profileImage: '',
         password: ''
     });
     const [image, setImage] = useState("");
@@ -26,16 +26,18 @@ const SignUpForm = () => {
 
     const [flag1, setFlag1] = useState(false);
     const [flag2, setFlag2] = useState(false);
-    const [isEmailVerify,setIsEmailVerified]=useState(false);
-    
+    const [isEmailVerify, setIsEmailVerified] = useState(false);
+
+
 
     const navigate = useNavigate();
 
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
-        if(emailMsg===" Email Verified..."){
+        if (emailMsg === " Email Verified..." || emailMsg === " Email is already in use.") {
             setFlag1(true);
+            setIsEmailVerified(true);
         }
     };
 
@@ -52,7 +54,7 @@ const SignUpForm = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if(!isEmailVerify){
+        if (!isEmailVerify) {
             alert("Please Verify Email First\nReload page to check verification status");
             return
         }
@@ -80,11 +82,68 @@ const SignUpForm = () => {
             alert("User Register Successfully....")
             navigate('/admin');
 
-        } catch (error) {
-            console.error('Error signing up:', error);
+        } catch (err) {
+            if (err.response && err.response.status === 500) {
+                alert('Duplicate Key Entry');
+            } else {
+                console.error('Error signing up:', err);
+            }
+          
         }
 
     };
+
+
+    const verifyEmail = async () => {
+        if (formData.email === "") {
+            alert("Please Enter Email");
+            return
+        }
+
+        // setEmailMessage("Verification Link Sent Successfully");
+        // return
+
+        try {
+            const userCred = await createUserWithEmailAndPassword(auth2, formData.email, "admin123");
+            const user = userCred.user;
+            await sendEmailVerification(user);
+            setEmailMessage("Verification Link Sent Successfully");
+
+        } catch (err) {
+            if (err.code === "auth/email-already-in-use") {
+                setFlag1(true);
+                console.error("Error Message from verifyEmail", err.code);
+                setEmailMessage(" Email is already in use.");
+            } else {
+                console.error("Error in Verifying Email:", err);
+            }
+        }
+    };
+
+    useEffect(() => {
+        // setFlag1(true);
+        // setEmailMessage(" Email Verified...");
+        // return
+
+        const unsubscribe = auth2.onAuthStateChanged((user) => {
+            if (user) {
+                setIsEmailVerified(user.emailVerified);
+                if (user.emailVerified) {
+                    setFlag1(true);
+                    setEmailMessage(" Email Verified...");
+                    setFormData((prevFormData) => ({
+                        ...prevFormData,
+                        email: user.email,
+                    }));
+
+                }
+            }
+        });
+
+        return () => unsubscribe(); 
+    }, []);
+
+
 
     const sendOTPButton = async () => {
         const regex = /^\+91[6-9]\d{4}[-]?\d{5}$/;
@@ -101,101 +160,31 @@ const SignUpForm = () => {
         // showVerifyBtn(true);
         // setOTPMsg(" OTP Sent Successfully")
         // return
+
         try {
             const recaptcha = new RecaptchaVerifier(auth, "recaptcha", {});
-            const confirmation1 = await signInWithPhoneNumber(auth, phone, recaptcha)
-            setUser(confirmation1)
+            const confirmation = await signInWithPhoneNumber(auth, phone, recaptcha);
+            setUser(confirmation);
             showVerifyBtn(true);
-            setOTPMsg(" OTP Sent Successfully")
-        }
-        catch (err) {
-            console.log("Error in Sending OTP", err)
-        }
-    }
+            setOTPMsg("OTP Sent Successfully");
+            document.getElementById('recaptcha').innerHTML = ""
 
-
-    const verifyEmail = async () => {
-        try {
-            const userCred = await createUserWithEmailAndPassword(auth, formData.email, "admin123");
-            const user = userCred.user;
-            await sendEmailVerification(user);
-            setEmailMessage("Verification Link Sent Successfully");
-        
         } catch (err) {
-            if (err.code === "auth/email-already-in-use") {
-                setFlag1(true);
-                console.error("Email is already in use:", err.message);
-                setEmailMessage("Email is already in use.");
+            if (err.code === "auth/too-many-requests") {
+                console.error("Too many OTP requests. Please try again later.");
+
+                setOTPMsg("Too many OTP requests. Please try again later.");
+            } else if (err.code === "auth/invalid-phone-number") {
+                console.error("Invalid phone number. Please enter a valid phone number.");
+
+                setOTPMsg("Invalid phone number. Please enter a valid phone number.");
             } else {
-                console.error("Error in Verifying Email:", err);
+
+                console.error("Error in Sending OTP:", err.code);
             }
         }
-    };
 
-    useEffect(() => {
-        const unsubscribe =  auth.onAuthStateChanged((user) => {
-            if (user) {
-                setIsEmailVerified(user.emailVerified);
-                if (user.emailVerified) {
-                    setFlag1(true);
-                    setEmailMessage(" Email Verified...");
-                    setFormData((prevFormData) => ({
-                        ...prevFormData,
-                        email:user.email ,
-                    }));
-                  
-                }
-            }
-        });
-        
-        return () => unsubscribe(); // Cleanup function to unsubscribe from the auth state changes
-    }, []);
-
-
-
-
-    // const verifyEmail = async () => {
-    //     try {
-    //         await createUserWithEmailAndPassword(auth, formData.email, "admin123").then(
-    //             async (userCred) => {
-    //                 const user = userCred.user;
-    //                 await sendEmailVerification(user);
-    //                 setEmailMsg(" Verification Link Sent Successfully")
-    //                 setFlag1(true)
-    //             });
-    //     }
-    //     catch (err) {
-    //         if (err.code === "auth/email-already-in-use") {
-    //             setFlag1(true)
-                
-    //             console.error("Email is already in use:", err.message);
-               
-    //             setEmailMsg(" Email is already in use.");
-    //         } else {
-    //             console.error("Error in Verifying Email:", err);
-    //         }
-    //     }
-
-    // }
-
-    // useEffect(() => {
-    //     if(userCred!=null){
-    //         auth.onAuthStateChanged((userCred) => {
-              
-    //                 const {emailVerified } = userCred;
-    //             if (emailVerified) {
-    //                 setFlag1(true)
-    //                 setIsEmailVerify(true)
-    //                 setEmailMsg(" Email Verified...")
-    //             }
-            
-    
-    //         });
-    //     }
-
-    // }, []);
-
-
+    }
 
     const verifyPhoneOTP = async () => {
         // setFlag2(true)
@@ -207,12 +196,21 @@ const SignUpForm = () => {
             setOTPMsg(" Phone Number Verified...")
         }
         catch (err) {
-            alert("Otp Expire or OTP Limit Reached or OTP Expire")
+            if (err.code === "auth/phone-number-already-exists") {
+                setFlag2(true);
+                console.error("Phone no is already in use:", err.code);
+                setOTPMsg("Phone no is already in use.");
+            } else if (err.code === "auth/invalid-phone-number") {
+                alert("Invalid Phone Number");
+            }
+            else {
+                setOTPMsg("Error in OTP Verification")
+
+            }
+
         }
 
     }
-
-
 
     return (
         <div>
@@ -228,15 +226,16 @@ const SignUpForm = () => {
                     <button type='button' className='mybtn' onClick={verifyEmail}>Send Verification Link</button><span style={{ fontSize: 'x-small' }}>{emailMsg}</span><br />
 
                     <label htmlFor="mobile">Mobile Number:</label>
-                    {/* <input type="tel" id="mobile"  pattern="[6-9]{1}[0-9]{9}"  /> */}
+                    
                     <PhoneInput
                         country={'in'}
                         value={phone}
                         onChange={(phone) => setPhone("+" + phone)}
                     />
-                    <div id='recaptcha' style={{ marginTop: '2px' }}>
 
-                    </div>
+
+                    <div id='recaptcha' style={{ marginTop: '2px' }}></div>
+
 
                     <button type='button' className='mybtn' onClick={sendOTPButton}>Send OTP</button><span style={{ fontSize: 'x-small' }}>{otpMsg}</span><br />
 
